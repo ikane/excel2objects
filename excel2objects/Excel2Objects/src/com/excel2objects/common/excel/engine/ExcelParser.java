@@ -18,13 +18,20 @@ import com.excel2objects.common.excel.convertors.Converter;
 import com.excel2objects.common.excel.exceptions.UnparsbleException;
 
 public class ExcelParser<T> {
-	Logger logger = Logger.getLogger(ExcelParser.class);
+	private final static Logger logger = Logger.getLogger(ExcelParser.class);
 	private int skipNoOfRows = 0;
 	private final Map<String, Converter> converterMap = new HashMap<String, Converter>();
 
 	public ExcelParser(int skipNoOfRows) throws InstantiationException, IllegalAccessException, ClassNotFoundException {
 		this.skipNoOfRows = skipNoOfRows;
 		this.init();
+
+	}
+
+	public void registerConverter(String type, Class<Converter> obj) throws InstantiationException, IllegalAccessException {
+		Converter objInstance = obj.newInstance();
+
+		this.converterMap.put(type, objInstance);
 
 	}
 
@@ -50,14 +57,16 @@ public class ExcelParser<T> {
 		objInstance = obj.newInstance();
 		this.converterMap.put("java.lang.String", objInstance);
 
+		obj = (Class<Converter>) Class.forName("com.excel2objects.common.excel.convertors.DoubleConverter");
+		objInstance = obj.newInstance();
+		this.converterMap.put("java.lang.Double", objInstance);
 	}
 
 	public List<T> getObjects(HSSFSheet sheet, Class<T> className, Map<Integer, String> map) throws ClassNotFoundException, IllegalAccessException, InvocationTargetException, NoSuchMethodException, InstantiationException, UnparsbleException {
 		final List<T> listObjects = new ArrayList<T>();
 		for (int i = 0; i < sheet.getPhysicalNumberOfRows(); i++) {
-			this.logger.debug("Processing row" + i);
-			if (i < this.skipNoOfRows)
-				continue;
+			logger.debug("Processing row" + i);
+			if (i < this.skipNoOfRows) continue;
 			final T obj = this.createObject(className, sheet.getRow(i), map);
 			listObjects.add(obj);
 		}
@@ -69,31 +78,33 @@ public class ExcelParser<T> {
 
 		final Class<T> obj = (Class<T>) Class.forName(className.getName());
 		final T objInstance = obj.newInstance();
-		this.logger.debug("Setting properties for class" + className.getName());
-		if (row == null)
-			return null;
+		logger.debug("Setting properties for class" + className.getName());
+		if (row == null) return null;
 		for (int i = 0; i < row.getPhysicalNumberOfCells(); i++) {
-			this.logger.debug("Processing cell" + i);
+			logger.debug("Processing cell" + i);
 
-			final String propertyName = map.get(new Integer(i));
-			this.logger.debug("Processing cell propertyName" + propertyName);
+			final String propertyName = map.get(new Integer(i + 1));
+			logger.debug("Processing cell propertyName" + propertyName);
 			final HSSFCell cell = row.getCell(i);
-			if (cell == null)
-				continue;
+			if (cell == null) continue;
 			if (propertyName == null || propertyName.trim().equalsIgnoreCase("")) {
 				continue;
 			}
 			Object value = null;
 			final Object cellValue = this.getCellValue(cell);
-			if (cellValue == null)
-				continue;
+			if (cellValue == null) continue;
+			logger.debug("Getting descriptor for property propertyName" + propertyName);
 			final PropertyDescriptor descriptor = PropertyUtils.getPropertyDescriptor(objInstance, propertyName);
+			if (descriptor == null) throw new UnparsbleException("Check if property" + propertyName + "exists");
+
 			final Class<?> type = descriptor.getPropertyType();
 			final Converter<?> converter = this.converterMap.get(type.getName());
+			if (converter == null) throw new UnparsbleException("No Converters for" + type.getName() + "exists");
+
 			try {
 				value = converter.from(cellValue);
 			} catch (final Exception e) {
-				this.logger.error(e);
+				logger.error(e);
 				value = null;
 			}
 			PropertyUtils.setSimpleProperty(objInstance, propertyName, value);
@@ -102,14 +113,10 @@ public class ExcelParser<T> {
 	}
 
 	private Object getCellValue(HSSFCell cell) {
-		if (cell == null)
-			return null;
-		if (cell.getCellType() == Cell.CELL_TYPE_BLANK)
-			return "";
-		if (cell.getCellType() == Cell.CELL_TYPE_NUMERIC)
-			return cell.getNumericCellValue();
-		if (cell.getCellType() == Cell.CELL_TYPE_STRING)
-			return cell.getStringCellValue().replaceAll("'", "");
+		if (cell == null) return null;
+		if (cell.getCellType() == Cell.CELL_TYPE_BLANK) return "";
+		if (cell.getCellType() == Cell.CELL_TYPE_NUMERIC) return cell.getNumericCellValue();
+		if (cell.getCellType() == Cell.CELL_TYPE_STRING) return cell.getStringCellValue().replaceAll("'", "");
 		return null;
 	}
 }
