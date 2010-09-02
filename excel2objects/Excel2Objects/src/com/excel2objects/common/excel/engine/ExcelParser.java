@@ -28,9 +28,7 @@ public class ExcelParser<T> {
 
 	}
 
-	public void registerConverter(String type, Class<Converter> obj) throws InstantiationException, IllegalAccessException {
-		Converter objInstance = obj.newInstance();
-
+	public void registerConverter(String type, Converter objInstance) throws InstantiationException, IllegalAccessException {
 		this.converterMap.put(type, objInstance);
 
 	}
